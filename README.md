@@ -48,7 +48,7 @@ python meshtastic_discord_bridge.py
 You can also bypass the manual setup by passing along the enviroment settings while starting the script
 
 ```bash
-python meshtastic_discord_bridge.py --token "TOKEN" --channel-id CHANNEL_ID --meshtastic-host "HOSTNAME" --include-username true
+python meshtastic_discord_bridge.py --token "TOKEN" --channel-id CHANNEL_ID --meshtastic-host "HOSTNAME-LEAVE-EMPTY-IF-USING-SERIAL" --include-username true
 ```
 
 ## Usage
