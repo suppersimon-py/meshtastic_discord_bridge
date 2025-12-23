@@ -64,7 +64,7 @@ Message Length Note:
 
 Meshtastic messages are limited to 225 characters.
 
-If username inclusion is enabled, the sender’s Discord username is prepended to the message (for example: SupperSimon: Hello world).
+If username inclusion is enabled, the sender’s Discord username is prepended to the message (for example: ```SupperSimon: Hello world```).
 This means longer usernames reduce the maximum length available for the message text itself.
 
 If username inclusion is disabled, the full 225 characters are available for the message body.
