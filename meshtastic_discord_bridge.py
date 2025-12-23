@@ -1,178 +1,189 @@
-import discord
-import asyncio
 import os
 import sys
-import io
-from dotenv import load_dotenv
-from pubsub import pub
+import queue
+import asyncio
+from datetime import datetime
+from dotenv import load_dotenv, find_dotenv
+
 import meshtastic
 import meshtastic.tcp_interface
 import meshtastic.serial_interface
-import queue
-import time
-from datetime import datetime
+from pubsub import pub
 
-load_dotenv()
-token = os.getenv("DISCORD_TOKEN")
-channel_id = int(os.getenv("DISCORD_CHANNEL_ID"))
-meshtastic_hostname = os.getenv("MESHTASTIC_HOSTNAME")
+import discord
 
+ENV_FILE = find_dotenv() or ".env"
+
+def first_time_setup():
+    if not os.path.exists(ENV_FILE):
+        print("First-time setup:")
+        token = input("Enter your Discord bot token: ").strip()
+        channel_id = input("Enter your Discord channel ID: ").strip()
+        meshtastic_hostname = input("Enter your Meshtastic hostname (leave blank for serial): ").strip()
+
+        with open(ENV_FILE, "w") as f:
+            f.write(f"DISCORD_TOKEN={token}\n")
+            f.write(f"DISCORD_CHANNEL_ID={channel_id}\n")
+            f.write(f"MESHTASTIC_HOSTNAME={meshtastic_hostname}\n")
+
+        print(f"\nConfiguration saved to {ENV_FILE}\n")
+    else:
+        print(f"Loading configuration from {ENV_FILE}\n")
+
+first_time_setup()
+load_dotenv(ENV_FILE)
+
+DISCORD_TOKEN = os.getenv("DISCORD_TOKEN")
+DISCORD_CHANNEL_ID = int(os.getenv("DISCORD_CHANNEL_ID"))
+MESHTASTIC_HOSTNAME = os.getenv("MESHTASTIC_HOSTNAME")
 meshtodiscord = queue.Queue()
 discordtomesh = queue.Queue()
 nodelistq = queue.Queue()
 
-def onConnectionMesh(interface, topic=pub.AUTO_TOPIC):  
-    """called when we (re)connect to the meshtastic radio"""
+def onConnectionMesh(interface, topic=pub.AUTO_TOPIC):
     print(interface.myInfo)
 
-def onReceiveMesh(packet, interface):  
-    """called when a packet arrives from mesh"""
+def onReceiveMesh(packet, interface):
     try:
-        if 'decoded' in packet: 
-            if packet['decoded']['portnum']=='TEXT_MESSAGE_APP': #only interest in text packets for now
-                meshtodiscord.put("Node "+packet['fromId']+" writes to node "+packet['toId']+ " this message: " +packet['decoded']['text'])
-#    App was occasionally failing where packet['fromId'] was nonetype, let's see if catching all exceptions helps
-#    except KeyError as e: #catch empty packet
-#        pass
+        if 'decoded' in packet:
+            if packet['decoded']['portnum'] == 'TEXT_MESSAGE_APP':
+                meshtodiscord.put(
+                    f"Node {packet.get('fromId')} writes to node {packet.get('toId')}: {packet['decoded']['text']}"
+                )
     except Exception as e:
         print("On receive mesh exception: " + str(e))
-        
+
 class MyClient(discord.Client):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
-    async def setup_hook(self) -> None:
-        # create the background task and run it in the background
-        self.bg_task = self.loop.create_task(self.my_background_task())
+    async def setup_hook(self):
+        self.bg_task = self.loop.create_task(self.background_task())
 
     async def on_ready(self):
-        print(f'Logged in as {self.user} (ID: {self.user.id})')
-        print('------')
-
-    async def on_connection(self):  # pylint: disable=unused-argument
-        # nothing to do here
-        return
-
+        print(f'Logged in as {self.user} (ID: {self.user.id})\n------')
 
     async def on_message(self, message):
         if message.author.id == self.user.id:
             return
 
+        sender = message.author.display_name
+
         if message.content.startswith('$help'):
-            helpmessage="Meshtastic Discord Bridge is up.  Command list:\n"\
-                "$sendprimary <message> sends a message up to 225 characters to the the primary channel\n"\
-                "$send nodenum=########### <message> sends a message up to 225 characters to nodenum ###########\n"\
-                "$activenodes will list all nodes seen in the last 15 minutes"
-            await message.channel.send(helpmessage)
+            helpmsg = (
+                "Meshtastic Discord Bridge is up. Command list:\n"
+                "$sendprimary <message> - sends message to primary channel\n"
+                "$send nodenum=<nodeid> <message> - sends message to specific node\n"
+                "$activenodes - list nodes seen in last 15 minutes"
+            )
+            await message.channel.send(helpmsg)
 
-        if message.content.startswith('$sendprimary'):
-            tempmessage=str(message.content)
-            tempmessage=tempmessage[tempmessage.find(' ')+1:225] #could be 228
-            await message.channel.send('Sending the following message to the primary channel:\n'+tempmessage)
-            discordtomesh.put(tempmessage)
+        elif message.content.startswith('$sendprimary'):
+            text = message.content[len('$sendprimary'):].strip()
+            formatted = f"{sender}: {text[:225 - len(sender)-2]}"
+            await message.channel.send(f"Sending the following message to the primary channel:\n{formatted}")
+            discordtomesh.put(formatted)
 
-        if message.content.startswith('$send nodenum='):
-            tempmessage=str(message.content)
-            nodenumstr=tempmessage[14:tempmessage.find(' ',14)+1]
-            tempmessage=tempmessage[tempmessage.find(' ',14)+1:225] #could be 228
+        elif message.content.startswith('$send nodenum='):
             try:
-                nodenum=int(nodenumstr)
-                await message.channel.send('Sending the following message:\n'+tempmessage+'\nto nodenum:\n'+str(nodenum))
-                discordtomesh.put("nodenum="+str(nodenum)+ " "+tempmessage)
-            except:
-                await message.channel.send('Could not send message')
-                 
- 
+                payload = message.content[len('$send nodenum='):].strip()
+                parts = payload.split(' ', 1)
+                if len(parts) != 2:
+                    raise ValueError("Missing message")
+                nodenum = parts[0]  # string, supports !hex
+                text = parts[1]
+                formatted = f"{sender}: {text[:225 - len(sender)-2]}"
+                await message.channel.send(f"Sending the following message:\n{formatted}\nto nodenum:\n{nodenum}")
+                discordtomesh.put(f"nodenum={nodenum} {formatted}")
+            except Exception:
+                await message.channel.send(
+                    "Usage: `$send nodenum=<nodeid> <message>`\nExample: `$send nodenum=!9ea17f48 hello`"
+                )
 
-        if message.content.startswith('$activenodes'):
-            nodelistq.put("just pop a message on this queue so we know to send nodelist to discord")
+        elif message.content.startswith('$activenodes'):
+            nodelistq.put("request_node_list")
 
-
-    async def my_background_task(self):
+    async def background_task(self):
         await self.wait_until_ready()
         counter = 0
-        nodelist=""
-        channel = self.get_channel(channel_id) 
+        nodelist = ""
+        channel = self.get_channel(DISCORD_CHANNEL_ID)
+
+        # Connect to Meshtastic
+        try:
+            if MESHTASTIC_HOSTNAME:
+                print("Connecting to TCP interface:", MESHTASTIC_HOSTNAME)
+                iface = meshtastic.tcp_interface.TCPInterface(MESHTASTIC_HOSTNAME)
+            else:
+                print("Connecting to Serial interface")
+                iface = meshtastic.serial_interface.SerialInterface()
+        except Exception as e:
+            print(f"Could not connect to Meshtastic: {e}")
+            sys.exit(1)
+
         pub.subscribe(onReceiveMesh, "meshtastic.receive")
         pub.subscribe(onConnectionMesh, "meshtastic.connection.established")
-        try:
-            if len(meshtastic_hostname)>1:
-                print("Trying TCP interface to "+meshtastic_hostname)
-                iface = meshtastic.tcp_interface.TCPInterface(meshtastic_hostname)
-            else:
-                print("Trying serial interface")
-                iface =  meshtastic.serial_interface.SerialInterface()
-        except Exception as ex:
-            print(f"Error: Could not connect {ex}")
-            sys.exit(1)
+
         while not self.is_closed():
             counter += 1
-            #Helpful to uncomment this print counter if you need to know if this task is still running
-            #print(counter)
-            if (counter%12==1):
-                #approx 1 minute (every 12th call, call every 5 seconds), refresh node list
-                nodelist="Node list:\n"
-                nodes=iface.nodes
-                for node in nodes:
+
+            # Refresh node list approx every 1 min
+            if counter % 12 == 1:
+                nodelist = "Node list:\n"
+                for node in iface.nodes:
                     try:
-                            id = str(nodes[node]['user']['id'])
-                            num = str(nodes[node]['num'])
-                            longname = str(nodes[node]['user']['longName'])
-                            if "hopsAway" in nodes[node]:
-                                hopsaway = str(nodes[node]['hopsAway'])
-                            else:
-                                hopsaway="0"
-                            if "snr" in nodes[node]:
-                                snr = str(nodes[node]['snr'])
-                            else:
-                                snr="?"
-                            if "lastHeard" in nodes[node]:
-                                ts=int(nodes[node]['lastHeard'])
-                                timestr = datetime.utcfromtimestamp(ts).strftime('%Y-%m-%d %H:%M:%S')
-                            else:
-                                #Just make it old so it doesn't show, only interested in nodes we know are active
-                                #Use this if you want to assign a time in the past: ts=time.time()-(16*60)
-                                timestr="Unknown"
-                            #Use this if you want to filter on time: if ts>time.time()-(15*60):
-                            nodelist=nodelist+"\nid:"+id + ", num:"+num+", longname:" + longname + ", hops:" + hopsaway + ", snr:"+snr+", lastheardutc:"+timestr 
-                    except KeyError as e:
-                        print(e)
-                        pass
+                        n = iface.nodes[node]
+                        id_ = str(n['user']['id'])
+                        num = str(n['num'])
+                        longname = str(n['user']['longName'])
+                        hops = str(n.get('hopsAway', 0))
+                        snr = str(n.get('snr', '?'))
+                        ts = int(n.get('lastHeard', 0))
+                        timestr = datetime.utcfromtimestamp(ts).strftime('%Y-%m-%d %H:%M:%S') if ts else "Unknown"
+                        nodelist += f"\nid:{id_}, num:{num}, longname:{longname}, hops:{hops}, snr:{snr}, lastheardutc:{timestr}"
+                    except KeyError:
+                        continue
+
+            # Send messages from Meshtastic -> Discord
             try:
-                meshmessage=meshtodiscord.get_nowait()
-                await channel.send(meshmessage)
+                meshmsg = meshtodiscord.get_nowait()
+                await channel.send(meshmsg)
                 meshtodiscord.task_done()
             except queue.Empty:
                 pass
+
+            # Send messages from Discord -> Meshtastic
             try:
-                meshmessage=discordtomesh.get_nowait()
-                if meshmessage.startswith('nodenum='):
-                    nodenum=int(meshmessage[8:meshmessage.find(' ')])
-                    iface.sendText(meshmessage[meshmessage.find(' ')+1:],destinationId=nodenum)
-                else:    
-                    iface.sendText(meshmessage)
+                meshmsg = discordtomesh.get_nowait()
+                if meshmsg.startswith('nodenum='):
+                    nodenum = meshmsg[8:meshmsg.find(' ')]
+                    text = meshmsg[meshmsg.find(' ') + 1:]
+                    iface.sendText(text, destinationId=nodenum)
+                else:
+                    iface.sendText(meshmsg)
                 discordtomesh.task_done()
-            except: #lets pass on both the empty queue and the int conversion
+            except queue.Empty:
                 pass
+
             try:
                 nodelistq.get_nowait()
-                #if there's any item on this queue, we'll send the nodelist
-                lines=nodelist.splitlines()
-                packet=""
-                for index,line in enumerate(lines):
-                    if len(packet)+len(line) < 1900:
-                        packet=packet+line+"\n"
+                lines = nodelist.splitlines()
+                packet = ""
+                for line in lines:
+                    if len(packet) + len(line) < 1900:
+                        packet += line + "\n"
                     else:
                         await channel.send(packet)
-                        packet=line+"\n"
+                        packet = line + "\n"
                 await channel.send(packet)
                 nodelistq.task_done()
             except queue.Empty:
                 pass
-            await asyncio.sleep(5) 
-        
-intents=discord.Intents.default()
+
+            await asyncio.sleep(5)
+
+intents = discord.Intents.default()
 intents.message_content = True
 
 client = MyClient(intents=intents)
-client.run(token)
+client.run(DISCORD_TOKEN)
