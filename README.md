@@ -34,12 +34,23 @@ A Discord bot which bridges discussions between a Discord channel and a Meshtast
    - Whether to include the Discord username in forwarded messages
    - These values will be saved automatically to a .env file for future runs.  
 
-4. **Install dependencies and start the bot**
+4. **Install dependencies**
 
 ```bash
 python3 -m pip install -r requirements.txt
+```
+
+5. **start the bot**
+```bash
 python meshtastic_discord_bridge.py
 ```
+
+You can also bypass the manual setup by passing along the enviroment settings while starting the script
+
+```bash
+python meshtastic_discord_bridge.py --token "TOKEN" --channel-id CHANNEL_ID --meshtastic-host "HOSTNAME" --include-username true
+```
+
 ## Usage
 
 You can now interact with Meshtastic through Discord.
