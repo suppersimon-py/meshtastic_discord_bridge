@@ -38,6 +38,8 @@ A Discord bot which bridges discussions between a Discord channel and a Meshtast
 
 ```bash
 python3 -m pip install -r requirements.txt
+or
+pip install -r requirements.txt
 ```
 
 5. **start the bot**
