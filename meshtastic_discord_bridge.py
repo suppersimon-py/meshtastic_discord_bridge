@@ -4,7 +4,7 @@ import queue
 import asyncio
 import argparse
 import time
-from datetime import datetime
+from datetime import datetime, timezone
 from dotenv import load_dotenv, find_dotenv
 import meshtastic
 import meshtastic.tcp_interface
@@ -156,22 +156,17 @@ class MyClient(discord.Client):
             try:
                 if MESHTASTIC_HOSTNAME:
                     print(f"Connecting to Meshtastic TCP: {MESHTASTIC_HOSTNAME}")
-                    iface = meshtastic.tcp_interface.TCPInterface(
-                        MESHTASTIC_HOSTNAME
-                    )
+                    iface = meshtastic.tcp_interface.TCPInterface(MESHTASTIC_HOSTNAME)
                 else:
                     print("Connecting to Meshtastic serial interface")
                     iface = meshtastic.serial_interface.SerialInterface()
             except Exception:
                 if time.time() - start_time > 10:
-                    print(
-                        "No Meshtastic device detected within 10 seconds. Exiting."
-                    )
+                    print("No Meshtastic device detected within 10 seconds. Exiting.")
                     sys.exit(1)
                 await asyncio.sleep(1)
         pub.subscribe(onReceiveMesh, "meshtastic.receive")
         pub.subscribe(onConnectionMesh, "meshtastic.connection.established")
-
         while not self.is_closed():
             try:
                 msg = meshtodiscord.get_nowait()
@@ -182,15 +177,39 @@ class MyClient(discord.Client):
             try:
                 msg = discordtomesh.get_nowait()
                 if msg.startswith("nodenum="):
-                    nodenum = msg[8 : msg.find(" ")]
-                    text = msg[msg.find(" ") + 1 :]
+                    nodenum = msg[8:msg.find(" ")]
+                    text = msg[msg.find(" ") + 1:]
                     iface.sendText(text, destinationId=nodenum)
                 else:
                     iface.sendText(msg)
                 discordtomesh.task_done()
             except queue.Empty:
                 pass
-
+            try:
+                nodelistq.get_nowait()
+                packet = "Active nodes:\n"
+                for node in iface.nodes.values():
+                    try:
+                        ts = int(node.get("lastHeard", 0))
+                        timestr = (
+                            datetime.fromtimestamp(ts, tz=timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
+                            if ts else "Unknown"
+                        )
+                        packet += (
+                            f"id:{node['user']['id']}, "
+                            f"num:{node['num']}, "
+                            f"name:{node['user']['longName']}, "
+                            f"hops:{node.get('hopsAway', 0)}, "
+                            f"snr:{node.get('snr', '?')}, "
+                            f"lastheard:{timestr}\n"
+                        )
+                    except Exception:
+                        continue
+                for i in range(0, len(packet), 1900):
+                    await channel.send(packet[i:i+1900])
+                nodelistq.task_done()
+            except queue.Empty:
+                pass
             await asyncio.sleep(5)
 
 intents = discord.Intents.default()
