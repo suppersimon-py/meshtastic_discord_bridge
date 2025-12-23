@@ -71,6 +71,6 @@ If username inclusion is disabled, the full 225 characters are available for the
 
 ## Screenshots
 
-<img width="617" height="795" alt="image" src="https://github.com/user-attachments/assets/649dd8e7-1e40-4fb4-9c48-d44bf355a1b4" />
-<img width="750" height="1334" alt="IMG_7359" src="https://github.com/user-attachments/assets/6151814d-c907-493e-bc88-b8d17fac0ba6" />
+<img width="463" height="596" alt="image" src="https://github.com/user-attachments/assets/649dd8e7-1e40-4fb4-9c48-d44bf355a1b4" />
 
+<img width="422" height="751" alt="IMG_7359" src="https://github.com/user-attachments/assets/6151814d-c907-493e-bc88-b8d17fac0ba6" />
