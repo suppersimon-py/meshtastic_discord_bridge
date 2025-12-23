@@ -10,17 +10,33 @@ A Discord bot which bridges discussions between a Discord channel and a Meshtast
 
 ## Installation and Startup
 
-Get a Discord Bot account and invite the bot to a server.  [Instructions](https://discordpy.readthedocs.io/en/stable/discord.html)
+1. **Create a Discord Bot account**  
+   Follow the [instructions](https://discordpy.readthedocs.io/en/stable/discord.html).
 
-Fill in the values for your environment in sampledotenvfile, and rename to .env 
+2. **Configure bot permissions**  
+   - Go to **OAuth2 > URL Generator** in your Discord application.  
+   - Under **Scopes**, select **bot**.  
+   - This will expand **Bot Permissions**—select the following:  
+     - `Read Message History`  
+     - `Send Messages`  
+     - `View Channels`  
 
-If you connect to your mesh device via TCP, specify the hostname in MESHTASTIC_HOSTNAME.  If no hostname is specified, a serial interface is assumed.
+3. **Invite the bot to your server**  
+   - Copy the generated URL from Step 2 and open it in a browser.  
+   - Select the server you want the bot to join and click **Authorize**.
 
-```
+
+4. **Set up your environment**  
+   - On first run, the bot will prompt you for your Discord token, channel ID, and Meshtastic hostname (if using TCP). 
+   - These values will be saved automatically to a .env file for future runs.  
+   - If you leave the Meshtastic hostname blank, the bot will attempt to connect via a serial interface.
+
+4. **Install dependencies and start the bot**
+
+```bash
 python3 -m pip install -r requirements.txt
 python meshtastic_discord_bridge.py
 ```
-
 ## Usage
 
 You can now interact with Meshtastic through Discord.
@@ -30,6 +46,7 @@ $sendprimary <message> sends a message up to 225 characters to the the primary c
 $send nodenum=########### <message> sends a message up to 225 characters to nodenum ###########
 $activenodes will list all nodes seen in the last 15 minutes
 ```
+Note: The username of whoever interacts will be included in the message. Longer usernames will reduce the maximum available message length.
 
 ## Screenshot
 
