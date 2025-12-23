@@ -12,8 +12,10 @@ A Discord bot which bridges discussions between a Discord channel and a Meshtast
 
 1. **Create a Discord Bot account**  
    Follow the [instructions](https://discordpy.readthedocs.io/en/stable/discord.html).
+   
+   Finding Channel ID [instructions](https://support.discord.com/hc/en-us/articles/206346498-Where-can-I-find-my-User-Server-Message-ID#h_01HRSTXPS5FMK2A5SMVSX4JW4E).
 
-2. **Configure bot permissions**  
+3. **Configure bot permissions**  
    - Go to **OAuth2 > URL Generator** in your Discord application.  
    - Under **Scopes**, select **bot**.  
    - This will expand **Bot Permissions**—select the following:  
@@ -21,15 +23,16 @@ A Discord bot which bridges discussions between a Discord channel and a Meshtast
      - `Send Messages`  
      - `View Channels`  
 
-3. **Invite the bot to your server**  
+4. **Invite the bot to your server**  
    - Copy the generated URL from Step 2 and open it in a browser.  
    - Select the server you want the bot to join and click **Authorize**.
 
 
-4. **Set up your environment**  
-   - On first run, the bot will prompt you for your Discord token, channel ID, and Meshtastic hostname (if using TCP). 
-   - These values will be saved automatically to a .env file for future runs.  
+5. **Set up your environment**  
+   - On first run, the bot will prompt you for your Discord token, channel ID, and Meshtastic hostname (if using TCP).
    - If you leave the Meshtastic hostname blank, the bot will attempt to connect via a serial interface.
+   - Whether to include the Discord username in forwarded messages
+   - These values will be saved automatically to a .env file for future runs.  
 
 4. **Install dependencies and start the bot**
 
@@ -46,9 +49,17 @@ $sendprimary <message> sends a message up to 225 characters to the the primary c
 $send nodenum=########### <message> sends a message up to 225 characters to nodenum ###########
 $activenodes will list all nodes seen in the last 15 minutes
 ```
-Note: The username of whoever interacts will be included in the message. Longer usernames will reduce the maximum available message length.
+Message Length Note:
 
-## Screenshot
+Meshtastic messages are limited to 225 characters.
 
-![Interacting with Meshtastic through Discord](/DiscordScreenshot.png)
+If username inclusion is enabled, the sender’s Discord username is prepended to the message (for example: SupperSimon: Hello world).
+This means longer usernames reduce the maximum length available for the message text itself.
+
+If username inclusion is disabled, the full 225 characters are available for the message body.
+
+## Screenshots
+
+<img width="617" height="795" alt="image" src="https://github.com/user-attachments/assets/649dd8e7-1e40-4fb4-9c48-d44bf355a1b4" />
+<img width="750" height="1334" alt="IMG_7359" src="https://github.com/user-attachments/assets/6151814d-c907-493e-bc88-b8d17fac0ba6" />
 
