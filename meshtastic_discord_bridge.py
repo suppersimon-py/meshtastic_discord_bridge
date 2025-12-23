@@ -15,10 +15,8 @@ import discord
 MAX_MESSAGE_LEN = 225
 ENV_FILE = find_dotenv() or ".env"
 
-
 def parse_args():
     parser = argparse.ArgumentParser(description="Meshtastic Discord Bridge")
-
     parser.add_argument("--token", help="Discord bot token")
     parser.add_argument("--channel-id", help="Discord channel ID")
     parser.add_argument(
@@ -30,12 +28,8 @@ def parse_args():
         choices=["true", "false"],
         help="Prepend Discord username to messages",
     )
-
     return parser.parse_args()
-
-
 args = parse_args()
-
 
 def save_env(token, channel_id, hostname, include_username):
     with open(ENV_FILE, "w") as f:
@@ -43,32 +37,23 @@ def save_env(token, channel_id, hostname, include_username):
         f.write(f"DISCORD_CHANNEL_ID={channel_id}\n")
         f.write(f"MESHTASTIC_HOSTNAME={hostname}\n")
         f.write(f"INCLUDE_USERNAME={str(include_username).lower()}\n")
-
     print(f"Configuration saved to {ENV_FILE}\n")
-
 
 def first_time_setup():
     print("First-time setup:\n")
-
     token = input("Enter your Discord bot token: ").strip()
     channel_id = input("Enter your Discord channel ID: ").strip()
     hostname = input(
         "Enter Meshtastic hostname (leave blank for serial): "
     ).strip()
-
     include_username = (
         input("Include Discord username in messages? (y/n): ")
         .strip()
         .lower()
         in ("y", "yes")
     )
-
     save_env(token, channel_id, hostname, include_username)
 
-
-# -------- CONFIG BOOTSTRAP --------
-
-# If args were passed, skip setup and write .env
 if args.token and args.channel_id and args.include_username is not None:
     save_env(
         token=args.token,
@@ -79,34 +64,25 @@ if args.token and args.channel_id and args.include_username is not None:
 else:
     if not os.path.exists(ENV_FILE):
         first_time_setup()
-
 load_dotenv(ENV_FILE)
-
 DISCORD_TOKEN = args.token or os.getenv("DISCORD_TOKEN")
 DISCORD_CHANNEL_ID = int(args.channel_id or os.getenv("DISCORD_CHANNEL_ID"))
-
 MESHTASTIC_HOSTNAME = (
     args.meshtastic_host
     if args.meshtastic_host is not None
     else os.getenv("MESHTASTIC_HOSTNAME", "")
 )
-
 INCLUDE_USERNAME = (
     args.include_username.lower() == "true"
     if args.include_username is not None
     else os.getenv("INCLUDE_USERNAME", "true").lower() == "true"
 )
-
 if not DISCORD_TOKEN or not DISCORD_CHANNEL_ID:
     print("Missing required Discord configuration.")
     sys.exit(1)
-
-# -------- QUEUES --------
-
 meshtodiscord = queue.Queue()
 discordtomesh = queue.Queue()
 nodelistq = queue.Queue()
-
 
 def format_message(sender, text):
     if INCLUDE_USERNAME:
@@ -114,11 +90,9 @@ def format_message(sender, text):
         return prefix + text[: MAX_MESSAGE_LEN - len(prefix)]
     return text[:MAX_MESSAGE_LEN]
 
-
 def onConnectionMesh(interface, topic=pub.AUTO_TOPIC):
     print("Connected to Meshtastic:")
     print(interface.myInfo)
-
 
 def onReceiveMesh(packet, interface):
     try:
@@ -133,7 +107,6 @@ def onReceiveMesh(packet, interface):
     except Exception as e:
         print("On receive mesh exception:", e)
 
-
 class MyClient(discord.Client):
     async def setup_hook(self):
         self.bg_task = self.loop.create_task(self.background_task())
@@ -144,9 +117,7 @@ class MyClient(discord.Client):
     async def on_message(self, message):
         if message.author.id == self.user.id:
             return
-
         sender = message.author.display_name
-
         if message.content.startswith("$help"):
             await message.channel.send(
                 "Meshtastic Discord Bridge\n"
@@ -162,7 +133,6 @@ class MyClient(discord.Client):
                 f"Sending the following message:\n{formatted}"
             )
             discordtomesh.put(formatted)
-
         elif message.content.startswith("$send nodenum="):
             try:
                 payload = message.content[len("$send nodenum="):].strip()
@@ -182,7 +152,6 @@ class MyClient(discord.Client):
         channel = self.get_channel(DISCORD_CHANNEL_ID)
         iface = None
         start_time = time.time()
-
         while iface is None:
             try:
                 if MESHTASTIC_HOSTNAME:
@@ -200,7 +169,6 @@ class MyClient(discord.Client):
                     )
                     sys.exit(1)
                 await asyncio.sleep(1)
-
         pub.subscribe(onReceiveMesh, "meshtastic.receive")
         pub.subscribe(onConnectionMesh, "meshtastic.connection.established")
 
@@ -211,7 +179,6 @@ class MyClient(discord.Client):
                 meshtodiscord.task_done()
             except queue.Empty:
                 pass
-
             try:
                 msg = discordtomesh.get_nowait()
                 if msg.startswith("nodenum="):
@@ -226,9 +193,7 @@ class MyClient(discord.Client):
 
             await asyncio.sleep(5)
 
-
 intents = discord.Intents.default()
 intents.message_content = True
-
 client = MyClient(intents=intents)
 client.run(DISCORD_TOKEN)
