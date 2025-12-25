@@ -1,10 +1,10 @@
 # meshtastic_discord_bridge
 
-A Discord bot which bridges discussions between a Discord channel and a Meshtastic mesh through a locally connected radio
+A Discord bot that bridges discussions between a Discord channel and a Meshtastic mesh through a locally connected radio
 
 ## Requirements
 
-- Python
+- Python 3.8+
 - A supported Meshtastic radio connected via USB 
 - Discord key and a channel
 
@@ -15,61 +15,118 @@ A Discord bot which bridges discussions between a Discord channel and a Meshtast
    
    Finding Channel ID [instructions](https://support.discord.com/hc/en-us/articles/206346498-Where-can-I-find-my-User-Server-Message-ID#h_01HRSTXPS5FMK2A5SMVSX4JW4E).
 
-3. **Configure bot permissions**  
-   - Go to **OAuth2 > URL Generator** in your Discord application.  
-   - Under **Scopes**, select **bot**.  
-   - This will expand **Bot Permissions**—select the following:  
+3. **Configure bot permissions**
+   - Go to **Bot**.
+   - Under **Privileged Gateway Intents** 
+   - Select the following:  
+     - `Presence Intents`  
+     - `Server Members Intent`  
+     - `Message Content Intent`
+   - Save changes
+     
+   - Go to **OAuth2 > URL Generator > Scopes > select bot**.  
+   - Under **Bot Permissions**, select:  
      - `Read Message History`  
      - `Send Messages`  
-     - `View Channels`  
+     - `View Channels`
 
-4. **Invite the bot to your server**  
-   - Copy the generated URL from Step 2 and open it in a browser.  
-   - Select the server you want the bot to join and click **Authorize**.
+5. **Invite the bot**  
+   - Copy the generated URL from OAuth2 tab and open it in a browser.  
+   - Select your server and click **Authorize**.
 
-
-5. **Set up your environment**  
-   - On first run, the bot will prompt you for your Discord token, channel ID, and Meshtastic hostname (if using TCP).
-   - If you leave the Meshtastic hostname blank, the bot will attempt to connect via a serial interface.
-   - Whether to include the Discord username in forwarded messages
-   - These values will be saved automatically to a .env file for future runs.  
+6. **Set up the environment**  
+   - On the first run, the bot will prompt you for the following:.
+      - Discord Token – your bot’s token.
+      - Discord Channel ID – the ID of the channel to bridge messages to.
+      - Meshtastic Hostname – only needed if connecting via TCP. Leave blank to use a serial connection.
+      - Include Username – whether to include the Discord username in messages sent to the primary channel.
+      - Command Prefix – the prefix for bot commands (default is $).
+   - These values will be automatically saved to `config.json` for future runs.
+   - Docker Users: Environment variables can be set directly in the start command instead of interactive input.
 
 4. **Install dependencies**
 
-```bash
-python3 -m pip install -r requirements.txt
-or
-pip install -r requirements.txt
-```
+   - Terminal Users:
+      ```
+      python3 -m pip install -r requirements.txt
+      or
+      pip install -r requirements.txt
+      ```
 
+   - Docker Users:
+      ```
+      docker build -t meshtastic_bridge .
+      ```
+   
 5. **start the bot**
-```bash
-python meshtastic_discord_bridge.py
-```
 
-You can also bypass the manual setup by passing along the enviroment settings while starting the script
-
-```bash
-python meshtastic_discord_bridge.py --token "TOKEN" --channel-id CHANNEL_ID --meshtastic-host "HOSTNAME-LEAVE-EMPTY-IF-USING-SERIAL" --include-username true
-```
+    - Terminal Users:
+      ```
+      python meshtastic_discord_bridge.py
+      ```
+    - Docker Users:
+      ```
+      docker run -d \
+        --name meshtastic_bridge \
+        --restart unless-stopped \
+        --device /dev/ttyACM0:/dev/ttyACM0 \
+        -e DISCORD_TOKEN="your_token_here" \
+        -e DISCORD_CHANNEL_ID="you_channel_id_here" \
+        -e MESHTASTIC_HOSTNAME="" \
+        -e INCLUDE_USERNAME="true" \
+        -e COMMAND_PREFIX="$" \
+        meshtastic_bridge
+      ```
+Finding the serial device
+1. Plug in your Meshtastic device.
+2. Check which device it is using:
+   ```ls /dev/tty*```
+      - On Linux, common names are **/dev/ttyACM0** or **/dev/ttyUSB0**.
+      - On macOS, it might be **/dev/cu.usbmodemXXXX** or **/dev/cu.usbserial-XXXX**.
+3. Use the detected device path in the Docker command:
+     ```--device /dev/ttyACM0:/dev/ttyACM0```
 
 ## Usage
 
 You can now interact with Meshtastic through Discord.
-
 ```
-$sendprimary <message> sends a message up to 225 characters to the the primary channel
+$sendprimary <message> sends a message up to 225 characters to the primary channel
 $send nodenum=########### <message> sends a message up to 225 characters to nodenum ###########
 $activenodes will list all nodes seen in the last 15 minutes
 ```
+
+
+- ### Sending direct messages through the bridge
+    - #### From Discord to Meshtastic:
+   
+       Use the command `send nodenum=########`
+       - This will send a direct message to the specific node on the Meshtastic network. Replace `########` with the node's ID.
+      
+    - #### From Meshtastic to Discord
+   
+      To send a direct message to a Discord user, start your message with: `!USERNAME Your message here.`
+       - `USERNAME` must be the Discord username of someone who has access to the main bridge channel.
+       - The bridge will send the message directly to that user via DM.
+       - If the message is not prefixed with a bridge node or username, it will be broadcast and visible to everyone on the Meshtastic network.
+
 Message Length Note:
 
 Meshtastic messages are limited to 225 characters.
+   
+   - Direct node messages (using `send nodenum=########`) will always include the sender's Discord username, even if the username inclusion is disabled globally.
+    
+      - Direct Message Example: `!suppersimon: Hello World`
+    
+      - Because of this, longer usernames reduce the maximum available length for the message text.
+   - Primary channel messages
+      - If a username inclusion is **enabled**, the sender's Discord Server Name is prepended, reducing the available message length.
+      - **Enabled** Example: `SupperSimon: Hello World.`
 
-If username inclusion is enabled, the sender’s Discord username is prepended to the message (for example: ```SupperSimon: Hello world```).
-This means longer usernames reduce the maximum length available for the message text itself.
+      -
 
-If username inclusion is disabled, the full 225 characters are available for the message body.
+      - If username inclusion is **disabled**, the full 225 characters are available for the message body.
+      - **Disabled** Example: `Hello World.`
+      
 
 ## Screenshots
 
