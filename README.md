@@ -1,12 +1,55 @@
-# meshtastic_discord_bridge
+# Meshtastic Discord Bridge
 
 A Discord bot that bridges discussions between a Discord channel and a Meshtastic mesh through a locally connected radio
 
 ## Requirements
 
 - Python 3.8+
-- A supported Meshtastic radio connected via USB 
+- A supported Meshtastic radio connected via USB or TCP
 - Discord key and a channel
+
+## Meshtastic Radio Configuration (Important)
+
+The Meshtastic device connected to this bot acts as both a Discord bridge and a mesh infrastructure node.
+For reliable operation especially direct messages to and from the bridge the device must be configured correctly.
+
+### Device Role Guidelines
+   - If the bridge node is not intended to act as a repeater:
+        Set it to `CLIENT`. It will function as a bridge only, without relaying messages for other mesh nodes.
+   - If the bridge node should act as a repeater (recommended):
+      - Set it to `ROUTER_CLIENT` if your firmware supports it.
+         This allows the bridge to forward messages on the mesh network while also bridging to Discord.
+      - If `Router_CLIENT` is not available, set it to `ROUTER`. This will still allow bridging and message forwarding, but **without full client only behavior**.
+
+   Do not leave it as `CLIENT` if you want devices on the mesh to reliably send direct messages to the bridge while it also repeats messages.
+
+   Using `CLIENT` in that case can result in messages appearing sent on the mesh but never reaching discord.
+
+### Set the role from the Terminal
+Use the Meshtastic CLI on the system connected to the radio:
+```
+# Example for repeater + bridge behavior
+meshtastic --port /dev/ttyACM0 --set device.role ROUTER_CLIENT
+
+# If ROUTER_CLIENT is not available
+meshtastic --port /dev/ttyACM0 --set device.role ROUTER
+
+# If bridge only, without repeater behavior
+meshtastic --port /dev/ttyACM0 --set device.role CLIENT
+
+# Reboot to apply changes
+meshtastic --port /dev/ttyACM0 --reboot
+```
+
+Verify the role after reboot:
+```
+meshtastic --port /dev/ttyACM0 --info
+```
+You should see something like this:
+```
+"role": "ROUTER_CLIENT"
+```
+
 
 ## Installation and Startup
 
