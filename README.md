@@ -97,11 +97,17 @@ You should see something like this:
       ```
 
    - Docker Users:
-      ```
-      docker build -t meshtastic_bridge .
-      ```
+      - Use Prebuilt Image:
+         ```
+         docker pull ghcr.io/suppersimon-py/meshtastic_discord_bridge:main
+         ```
    
-5. **start the bot**
+      - Build Image:
+         ```
+         docker build -t meshtastic_bridge .
+         ```
+   
+6. **start the bot**
 
     - Terminal Users:
       ```
