@@ -114,8 +114,22 @@ You should see something like this:
       python meshtastic_discord_bridge.py
       ```
     - Docker Users:
-      ```
-      docker run -d \
+       - Prebuilt:
+         ```
+         docker run -d \
+           --name meshtastic_bridge \
+           --restart unless-stopped \
+           --device /dev/ttyACM0:/dev/ttyACM0 \
+           -e DISCORD_TOKEN="your_token_here" \
+           -e DISCORD_CHANNEL_ID="you_channel_id_here" \
+           -e MESHTASTIC_HOSTNAME="" \
+           -e INCLUDE_USERNAME="true" \
+           -e COMMAND_PREFIX="$" \
+            ghcr.io/suppersimon-py/meshtastic_discord_bridge:main
+         ```
+      - User Built:
+        ```
+         docker run -d \
         --name meshtastic_bridge \
         --restart unless-stopped \
         --device /dev/ttyACM0:/dev/ttyACM0 \
@@ -124,8 +138,9 @@ You should see something like this:
         -e MESHTASTIC_HOSTNAME="" \
         -e INCLUDE_USERNAME="true" \
         -e COMMAND_PREFIX="$" \
-        meshtastic_bridge
-      ```
+         meshtastic_bridge
+         ```
+        
 Finding the serial device
 1. Plug in your Meshtastic device.
 2. Check which device it is using:
