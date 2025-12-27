@@ -379,18 +379,42 @@ class MeshDiscordBridge(discord.Client):
                     if not self.iface:
                         await reply_channel.send("Meshtastic not connected.")
                         continue
-
-                    lines = ["**Active Nodes (last heard):**\n```"]
                     my_num = self.iface.myInfo.my_node_num if self.iface.myInfo else None
+                    all_nodes = list(self.iface.nodesByNum.values())
+                    my_node = next((n for n in all_nodes if n.get("num") == my_num), None)
+                    other_nodes = [n for n in all_nodes if n.get("num") != my_num]
+                    other_nodes.sort(key=lambda n: n.get("lastHeard", 0), reverse=True)
 
-                    # Use nodesByNum for correct data
-                    all_nodes = self.iface.nodesByNum.values()
-                    nodes = sorted(all_nodes, key=lambda n: n.get("lastHeard", 0), reverse=True)
+                    # Own node box
+                    if my_node:
+                        user = my_node.get("user", {})
+                        num = my_node.get("num")
+                        node_id = f"!{num:08X}" if num is not None else "?"
+                        long_name = user.get("longName", "").strip() or "?"
+                        short_name = user.get("shortName", "").strip() or "?"
+                        name_display = (
+                            f"{long_name} ({short_name})"
+                            if long_name != short_name and "?" not in (long_name, short_name)
+                            else (long_name if long_name != "?" else short_name)
+                        )
+                        snr = my_node.get("snr", "?")
+                        hops = my_node.get("hopsAway", 0)
+                        ts = my_node.get("lastHeard", 0)
+                        timestr = (
+                            datetime.fromtimestamp(ts, tz=timezone.utc).strftime("%H:%M:%S")
+                            if ts else "Never"
+                        )
+                        my_lines = [
+                            "**This Node:**",
+                            "```",
+                            f"{name_display:<30} | {node_id} | SNR: {snr:<5} | Hops: {hops} | Last: {timestr}",
+                            "```",
+                        ]
+                        await reply_channel.send("\n".join(my_lines))
 
-                    # Optional: exclude own node
-                    nodes = [n for n in nodes if n.get("num") != my_num]
-
-                    for node in nodes:
+                    # Other nodes
+                    lines = ["**Active Nodes (last heard):**", "```"]
+                    for node in other_nodes:
                         user = node.get("user", {})
                         num = node.get("num")
                         node_id = f"!{num:08X}" if num is not None else "?"
@@ -398,19 +422,23 @@ class MeshDiscordBridge(discord.Client):
                         short_name = user.get("shortName", "").strip() or "?"
                         name_display = (
                             f"{long_name} ({short_name})"
-                            if long_name != "?" and short_name != "?" and long_name != short_name
+                            if long_name != short_name and "?" not in (long_name, short_name)
                             else (long_name if long_name != "?" else short_name)
                         )
                         snr = node.get("snr", "?")
                         hops = node.get("hopsAway", 0)
                         ts = node.get("lastHeard", 0)
-                        timestr = datetime.fromtimestamp(ts, tz=timezone.utc).strftime("%H:%M:%S") if ts else "Never"
-                        lines.append(f"{name_display:<30} | {node_id} | SNR: {snr:<5} | Hops: {hops} | Last: {timestr}")
-
+                        timestr = (
+                            datetime.fromtimestamp(ts, tz=timezone.utc).strftime("%H:%M:%S")
+                            if ts else "Never"
+                        )
+                        lines.append(
+                            f"{name_display:<30} | {node_id} | SNR: {snr:<5} | Hops: {hops} | Last: {timestr}"
+                        )
                     lines.append("```")
                     packet = "\n".join(lines)
                     for i in range(0, len(packet), 1900):
-                        await reply_channel.send(packet[i:i+1900])
+                        await reply_channel.send(packet[i:i + 1900])
 
                 await asyncio.sleep(1)
             except Exception as e:
