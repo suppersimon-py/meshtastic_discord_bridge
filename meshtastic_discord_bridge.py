@@ -27,7 +27,6 @@ logging.basicConfig(
 log = logging.getLogger(__name__)
 
 # Config Management
-
 def first_time_setup():
     log.info("No configuration found. Starting first-time setup.")
     try:
@@ -126,7 +125,6 @@ def load_config():
     return first_time_setup()
 
 config = load_config()
-
 DISCORD_TOKEN = config["DISCORD_TOKEN"]
 DISCORD_CHANNEL_ID = int(config["DISCORD_CHANNEL_ID"])
 MESHTASTIC_HOSTNAME = config.get("MESHTASTIC_HOSTNAME", "")
@@ -150,7 +148,6 @@ def format_mesh_message(packet, interface):
             return None
         from_id = packet.get("from")
         node_id = f"!{from_id:08X}" if from_id is not None else "?"
-
         # Sender display
         from_node_info = interface.nodes.get(from_id, {})
         user = from_node_info.get("user", {})
@@ -164,7 +161,6 @@ def format_mesh_message(packet, interface):
             sender_display = long_name
         else:
             sender_display = short_name
-
         # Destination handling
         to_id = packet.get("to")
         if to_id == interface.myInfo.my_node_num:
@@ -182,11 +178,10 @@ def format_mesh_message(packet, interface):
         else:
             arrow = "→" if dest != "You" else "whispers to"
             return f"**{sender_display}** (`{node_id}`) {arrow} **{dest}**:\n{text}"
-
     except Exception as e:
         log.error(f"Error formatting mesh message: {e}")
         return None
-    
+   
 def format_message_for_mesh(author, text, is_dm=False):
     """Format message sent to mesh: use !username in DMs, display name in public"""
     if is_dm and INCLUDE_USERNAME:
@@ -207,16 +202,14 @@ async def handle_mesh_to_discord(packet, interface):
     decoded = packet.get("decoded", {})
     if decoded.get("portnum") != "TEXT_MESSAGE_APP":
         return
-
     raw_text = decoded.get("text", "").strip()
     if not raw_text:
         return
-
     main_channel = client.get_channel(DISCORD_CHANNEL_ID)
     if not main_channel:
         return
 
-    # PRIVATE MESSAGE DETECTION
+    # PRIVATE MESSAGE DETECTION (!username message)
     if raw_text.startswith("!") and len(raw_text) > 1 and raw_text[1] != " ":
         parts = raw_text[1:].split(" ", 1)
         username = parts[0]
@@ -232,9 +225,9 @@ async def handle_mesh_to_discord(packet, interface):
                     from_id = packet.get("from")
                     node = interface.nodes.get(from_id, {}).get("user", {})
                     sender_name = (
-                        node.get("`longName`")
-                        or node.get("`shortName`")
-                        or f"Node `{packet.get('fromId', 'unknown')}`"
+                        node.get("longName")
+                        or node.get("shortName")
+                        or f"Node !{packet.get('from', 'unknown'):08X}"
                     )
                     await dm.send(f"Private message from {sender_name}:\n{message_body}")
                     return
@@ -261,21 +254,20 @@ class MeshDiscordBridge(discord.Client):
 
     async def setup_hook(self):
         self.bg_task = asyncio.create_task(self.bridge_task())
+
     async def on_ready(self):
         log.info(f"Discord bot logged in as {self.user} (ID: {self.user.id})")
-
         channel = self.get_channel(DISCORD_CHANNEL_ID)
         if not channel or not channel.guild:
             log.warning("Could not resolve guild from channel")
             return
-
         log.info(f"Users in guild '{channel.guild.name}':")
         for member in sorted(channel.guild.members, key=lambda m: m.name.lower()):
             log.info(f"- {member.name}#{member.discriminator} (ID: {member.id})")
+
     async def on_message(self, message):
         if message.author.id == self.user.id:
             return
-
         is_dm = isinstance(message.channel, discord.DMChannel)
         is_bridge_channel = message.channel.id == DISCORD_CHANNEL_ID
         if not (is_dm or is_bridge_channel):
@@ -284,6 +276,7 @@ class MeshDiscordBridge(discord.Client):
         if not content.startswith(COMMAND_PREFIX):
             return
         cmd = content[len(COMMAND_PREFIX):].strip()
+
         if cmd.startswith("help"):
             await message.channel.send(
                 f"**Meshtastic ↔ Discord Bridge** (prefix `{COMMAND_PREFIX}`)\n\n"
@@ -292,15 +285,19 @@ class MeshDiscordBridge(discord.Client):
                 f"`{COMMAND_PREFIX}activenodes` → List active nodes\n\n"
                 f"*In DMs: use `{COMMAND_PREFIX}send nodenum=` to reply privately.*"
             )
-        elif cmd.startswith("sendprimary"):
+
+        elif cmd.startswith("sendprimary "):
             if is_dm:
                 await message.channel.send(f"`{COMMAND_PREFIX}sendprimary` cannot be used in DMs. Use `{COMMAND_PREFIX}send nodenum=` for private replies.")
                 return
-            text = cmd[len("sendprimary"):].strip()
-            if text:
-                formatted = format_message_for_mesh(message.author, text, is_dm=False)
-                await discordtomesh.put(formatted)
-                await message.channel.send(f"**Sending to primary channel:**\n{formatted}")
+            text = cmd[len("sendprimary "):].strip()
+            if not text:
+                await message.channel.send(f"Usage: `{COMMAND_PREFIX}sendprimary <message>`")
+                return
+            formatted = format_message_for_mesh(message.author, text, is_dm=False)
+            await discordtomesh.put(formatted)
+            await message.channel.send(f"**Sending to primary channel:**\n{formatted}")
+
         elif cmd.startswith("send nodenum="):
             try:
                 payload = cmd[len("send nodenum="):].strip()
@@ -309,7 +306,7 @@ class MeshDiscordBridge(discord.Client):
                     nodenum = int(nodenum_str[1:], 16)
                 else:
                     nodenum = int(nodenum_str)
-                formatted = format_message_for_mesh(message.author, text, is_dm=True)  # !username in DMs
+                formatted = format_message_for_mesh(message.author, text, is_dm=True)
                 await discordtomesh.put(f"nodenum={nodenum} {formatted}")
                 status = "privately" if is_dm else "direct"
                 await message.channel.send(f"Sending {status} to node {nodenum_str}:\n{formatted}")
@@ -317,6 +314,7 @@ class MeshDiscordBridge(discord.Client):
                 await message.channel.send("**Invalid node ID.**")
             except:
                 await message.channel.send(f"Usage: `{COMMAND_PREFIX}send nodenum=<id> <msg>`")
+
         elif cmd.startswith("activenodes"):
             await nodelistq.put(message)
 
@@ -381,24 +379,39 @@ class MeshDiscordBridge(discord.Client):
                     if not self.iface:
                         await reply_channel.send("Meshtastic not connected.")
                         continue
+
                     lines = ["**Active Nodes (last heard):**\n```"]
-                    nodes = sorted(self.iface.nodes.values(), key=lambda n: n.get("lastHeard", 0), reverse=True)
+                    my_num = self.iface.myInfo.my_node_num if self.iface.myInfo else None
+
+                    # Use nodesByNum for correct data
+                    all_nodes = self.iface.nodesByNum.values()
+                    nodes = sorted(all_nodes, key=lambda n: n.get("lastHeard", 0), reverse=True)
+
+                    # Optional: exclude own node
+                    nodes = [n for n in nodes if n.get("num") != my_num]
+
                     for node in nodes:
                         user = node.get("user", {})
                         num = node.get("num")
                         node_id = f"!{num:08X}" if num is not None else "?"
                         long_name = user.get("longName", "").strip() or "?"
                         short_name = user.get("shortName", "").strip() or "?"
-                        name_display = f"{long_name} ({short_name})" if long_name != "?" and short_name != "?" and long_name != short_name else (long_name if long_name != "?" else short_name)
+                        name_display = (
+                            f"{long_name} ({short_name})"
+                            if long_name != "?" and short_name != "?" and long_name != short_name
+                            else (long_name if long_name != "?" else short_name)
+                        )
                         snr = node.get("snr", "?")
                         hops = node.get("hopsAway", 0)
                         ts = node.get("lastHeard", 0)
                         timestr = datetime.fromtimestamp(ts, tz=timezone.utc).strftime("%H:%M:%S") if ts else "Never"
                         lines.append(f"{name_display:<30} | {node_id} | SNR: {snr:<5} | Hops: {hops} | Last: {timestr}")
+
                     lines.append("```")
                     packet = "\n".join(lines)
                     for i in range(0, len(packet), 1900):
                         await reply_channel.send(packet[i:i+1900])
+
                 await asyncio.sleep(1)
             except Exception as e:
                 log.error(f"Bridge task error: {e}")
@@ -408,8 +421,10 @@ class MeshDiscordBridge(discord.Client):
 def shutdown_handler(sig, frame):
     log.info("Shutdown signal received. Exiting...")
     sys.exit(0)
+
 signal.signal(signal.SIGINT, shutdown_handler)
 signal.signal(signal.SIGTERM, shutdown_handler)
+
 client = MeshDiscordBridge()
 try:
     client.run(DISCORD_TOKEN)
