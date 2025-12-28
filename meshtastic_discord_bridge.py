@@ -149,7 +149,7 @@ def format_mesh_message(packet, interface):
         from_id = packet.get("from")
         node_id = f"!{from_id:08X}" if from_id is not None else "?"
         # Sender display
-        from_node_info = interface.nodes.get(from_id, {})
+        from_node_info = interface.nodesByNum.get(from_id, {})
         user = from_node_info.get("user", {})
         long_name = user.get("longName", "").strip()
         short_name = user.get("shortName", "").strip()
@@ -168,7 +168,7 @@ def format_mesh_message(packet, interface):
         elif to_id == 0xFFFFFFFF:
             dest = "primary"
         else:
-            to_node_info = interface.nodes.get(to_id, {})
+            to_node_info = interface.nodesByNum.get(to_id, {})
             to_user = to_node_info.get("user", {})
             dest_long = to_user.get("longName", "").strip()
             dest_short = to_user.get("shortName", "").strip()
@@ -223,7 +223,7 @@ async def handle_mesh_to_discord(packet, interface):
                 try:
                     dm = target_member.dm_channel or await target_member.create_dm()
                     from_id = packet.get("from")
-                    node = interface.nodes.get(from_id, {}).get("user", {})
+                    node = interface.nodesByNum.get(from_id, {}).get("user", {})
                     sender_name = (
                         node.get("longName")
                         or node.get("shortName")
@@ -407,7 +407,7 @@ class MeshDiscordBridge(discord.Client):
                         my_lines = [
                             "**This Node:**",
                             "```",
-                            f"{name_display:<30} | {node_id} | SNR: {snr:<5} | Hops: {hops} | Last: {timestr}",
+                            f"{name_display:<30} | {node_id}",
                             "```",
                         ]
                         await reply_channel.send("\n".join(my_lines))
